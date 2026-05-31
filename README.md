@@ -23,11 +23,13 @@ forge test -vvv
 src/
   Fallback.sol            # Lv1 재현 — receive() 옆문으로 owner 탈취 (// VULN / // FIX 표기)
   Reentrancy.sol          # Lv10 재현 — call 먼저 / 차감 나중 (// VULN / // FIX 표기)
-  ReentrancyAttacker.sol  # Lv10 공격 컨트랙트 (재귀 인출)
+  ReentrancyAttacker.sol  # 공격A: 0.1씩 재귀 인출 (Ethernaut 정석)
+  ReentrancyAttackerMax.sol # 공격B: 1회 재진입에 최대 금액 (실전형 — 2번에 전액)
   AuditMe.sol             # LLM 분석 연습용 — 버그 3개, 주석/힌트 없음
 test/
   Fallback.t.sol          # testTakeover: owner 탈취 + 잔액 인출
-  Reentrancy.t.sol        # testDrain: 남의 돈까지 전액 탈취
+  Reentrancy.t.sol        # testDrain: 0.1씩 → 5.1 전액 탈취
+  ReentrancyMax.t.sol     # testDrainMax: 단 2번의 withdraw로 전액(잔액 크기 무관)
   AuditMe.t.sol           # testAnyoneCanDrain(무권한) + testTxOriginPhishing(피싱)
 ```
 
@@ -50,6 +52,18 @@ test/
 > **공격이 revert로 막혀 PoC가 성립하지 않는다.** 그래서 `Reentrancy.withdraw()`의 차감만
 > `unchecked {}`로 감싸 0.6.x의 wrap 거동을 재현했다. (취약점 본질=call 선행은 그대로.)
 > → 이것이 곧 방어 포인트: **0.8.x의 기본 오버플로/언더플로 검사 자체가 1차 방어선**이 된다.
+
+### 재진입 공격, 두 가지 방식 (찔끔 vs 최대)
+같은 취약점이지만 공격자가 1회당 빼는 금액에 따라 효율이 갈린다.
+
+| 방식 | 1회 인출 | 재귀 횟수 | 한계 |
+|---|---|---|---|
+| A. 찔끔 (`ReentrancyAttacker`) | 0.1 ETH 고정 | 잔액÷0.1 (5.1 ETH → 51회) | **가스(63/64 규칙)로 ~270회에서 전액 revert**, EVM 콜스택 1024 |
+| B. 최대 (`ReentrancyAttackerMax`) | min(컨트랙트잔액, 내장부) | **항상 2회** | 잔액 크기와 무관. 단 시드 ≥ 피해자 잔액 필요(현실에선 flash loan) |
+
+핵심: 깊이로 승부 보는 게 아니라 **1회 인출액을 키우는 게 실전**이다. B는 피해자 잔액이 5든 50이든
+`withdraw` **딱 2번**으로 컨트랙트를 비운다(`testDrainMax`/`testDrainMaxLargePot`로 증명). 재진입 중
+장부(`balanceOf`)가 차감 전이라 그대로이므로, 매 호출 "뺄 수 있는 최대"를 빼면 깊이·가스 한계에 안 걸린다.
 
 ## 방어법 요약
 
