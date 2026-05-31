@@ -1,0 +1,10 @@
+# Foundry
+/out/
+/cache/
+/broadcast/
+
+# Docs
+docs/
+
+# Dotenv
+.env
